@@ -5,11 +5,18 @@
 #
 #   python client.py session <host> <port> <version> <device id> <local key>
 #   python client.py listen
+#   python client.py gateway <host> <port> <version> <gateway id> <local key> <cid1> <cid2>
+#   python client.py bulb|cover <host> <port> <version> <device id> <local key>
+#   python client.py devinfo <host> <udp port>
 #
 # "session" reads, switches and sets a device with tinytuya's
 # OutletDevice and prints "PEER <step> <json>" after each step; after
 # "PEER waiting" it reads one status push. "listen" binds UDP 6666, 6667
 # and 7000 and prints each announcement as tinytuya decodes it.
+# "gateway" drives a plug and a bulb sub-device of a gateway with
+# tinytuya's child devices (cid, parent); "bulb" and "cover" drive
+# tinytuya's BulbDevice and CoverDevice; "devinfo" sends tinytuya's
+# REQ_DEVINFO (scanner.send_discovery_request) and decodes the answer.
 
 import json
 import socket
@@ -18,6 +25,7 @@ import select
 
 import tinytuya
 from tinytuya.core.udp_helper import decrypt_udp
+from tinytuya.scanner import send_discovery_request
 
 
 def say(step, obj=None):
@@ -65,7 +73,72 @@ def listen():
                 say("undecodable", {"port": port, "error": repr(e), "hex": data.hex()})
 
 
-if sys.argv[1] == "session":
+def opts(version, port):
+    return dict(version=float(version), port=int(port), connection_timeout=5, connection_retry_limit=2, connection_retry_delay=1)
+
+
+def gateway(host, port, version, gw_id, key, cid1, cid2):
+    gw = tinytuya.Device(gw_id, host, key, **opts(version, port))
+    gw.set_socketPersistent(True)
+    plug = tinytuya.OutletDevice("childplug0000001", cid=cid1, parent=gw)
+    bulb = tinytuya.BulbDevice("childbulb0000001", cid=cid2, parent=gw)
+    if version == "3.2":
+        plug.set_dpsUsed({"1": None, "19": None})
+        bulb.set_dpsUsed({"20": None, "21": None, "22": None})
+    say("status", plug.status())
+    say("turn_on", plug.turn_on())
+    say("updatedps", plug.updatedps([19]))
+    say("status2", plug.status())
+    say("bulb", bulb.status())
+    gw.close()
+    say("done")
+
+
+def bulb(host, port, version, dev_id, key):
+    b = tinytuya.BulbDevice(dev_id, host, key, **opts(version, port))
+    b.set_socketPersistent(True)
+    say("status", b.status())
+    say("type", {"type": b.bulb_type})
+    say("set_colour", b.set_colour(10, 20, 200))
+    say("set_white_percentage", b.set_white_percentage(60, 30))
+    say("state", b.state())
+    b.close()
+    say("done")
+
+
+def cover(host, port, version, dev_id, key):
+    c = tinytuya.CoverDevice(dev_id, host, key, **opts(version, port))
+    c.set_socketPersistent(True)
+    say("open", c.open_cover())
+    say("position", c.set_value(2, 40))
+    say("stop", c.stop_cover())
+    say("status", c.status())
+    c.close()
+    say("done")
+
+
+def devinfo(host, port):
+    # tinytuya's own REQ_DEVINFO sender, aimed at the simulator; the answer
+    # comes back to this socket.
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.bind(("0.0.0.0", 0))
+    s.settimeout(5)
+    me = socket.gethostbyname(socket.gethostname())
+    send_discovery_request({me: {"broadcast": host, "port": int(port), "socket": s}})
+    data, _ = s.recvfrom(4096)
+    say("devinfo", {"json": json.loads(decrypt_udp(data))})
+
+
+mode = sys.argv[1]
+if mode == "session":
     session(*sys.argv[2:7])
+elif mode == "gateway":
+    gateway(*sys.argv[2:9])
+elif mode == "bulb":
+    bulb(*sys.argv[2:7])
+elif mode == "cover":
+    cover(*sys.argv[2:7])
+elif mode == "devinfo":
+    devinfo(*sys.argv[2:4])
 else:
     listen()

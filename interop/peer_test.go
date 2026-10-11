@@ -23,7 +23,7 @@ const image = "sigma-tuyalan-sim-interop:tinytuya-1.20.0"
 const envVar = "SIGMA_TUYALAN_INTEROP"
 
 // needDocker skips the test unless the environment variable is 1 and
-// Docker answers, and builds the peer image when it is missing.
+// Docker answers, and builds the peer image.
 func needDocker(t *testing.T) {
 	t.Helper()
 	if os.Getenv(envVar) != "1" {
@@ -35,9 +35,8 @@ func needDocker(t *testing.T) {
 	if err := exec.Command("docker", "info").Run(); err != nil {
 		t.Skip("docker is not running")
 	}
-	if exec.Command("docker", "image", "inspect", image).Run() == nil {
-		return
-	}
+	// Built every time (Docker reuses its cached layers), so edits to the
+	// peer scripts are never tested against a stale image.
 	out, err := exec.Command("docker", "build", "-q", "-t", image, "peer").CombinedOutput()
 	if err != nil {
 		t.Fatalf("docker build: %v\n%s", err, out)
