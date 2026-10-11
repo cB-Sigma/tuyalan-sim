@@ -3,6 +3,31 @@
 All notable changes to this module. Versions follow semantic versioning;
 before v1 the API may change in minor versions.
 
+## v0.3.0 (2026-10-12)
+
+Additions only; needs tuyalan v0.3.0.
+
+- A gateway answers the sub-device online query (LAN_EXT_STREAM,
+  `subdev_online_stat_query`) with its online and offline cids, in 3.4
+  and 3.5; `Device.SetSubOffline` marks a sub-device offline. The
+  `tuyasim` gateway type answers it too.
+- Device types on the tuyalan `contrib` layouts: `NewFan`, `NewClimate`,
+  `NewThermostat` (with a remote sensor list) and `NewIRBlaster` /
+  `IRBlaster` (control type 1 or 2; records commands, follows study
+  mode, `Learn` reports a learned code). `tuyasim -type` gains fan,
+  climate, thermostat, irblaster and irblaster2.
+- Tests driving tuyalan v0.3.0 against the simulator: `IdentifyWithKeys`,
+  `SubdevQuery`, `DetectAvailableDPS`, the persistent `Device`
+  (including reconnection after `SetDown`, device22 reads with
+  `QueryDPS`, and a status right after a set), and the `contrib`
+  helpers on the new device types.
+- Interop: tinytuya's `subdev_query`, `detect_available_dps`,
+  `IRRemoteControlDevice` (type detection, sending, learning),
+  `FloorFanDevice` and `ThermostatDevice` against the simulator.
+- Test fix: `TestDiscoverAgainstSimulator` took its request count while
+  `Discover`'s last requests could still arrive, and failed now and then;
+  it now waits for them first.
+
 ## v0.2.0 (2026-10-11)
 
 Additions only; needs tuyalan v0.2.0.

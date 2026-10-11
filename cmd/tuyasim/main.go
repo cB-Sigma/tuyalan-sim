@@ -7,9 +7,11 @@
 // default; a metering plug with data points 1 switch, 9 countdown, 18
 // current in mA, 19 power in 0.1 W and 20 voltage in 0.1 V), "bulb" (the
 // newer bulb layout, from data point 20), "bulbv1" (the older one, from
-// 1), "dimmer", "cover" (1 control, 2 and 3 position), or "gateway" (a
+// 1), "dimmer", "cover" (1 control, 2 and 3 position), "gateway" (a
 // gateway with a plug sub-device a4c1380000000001 and a bulb
-// a4c1380000000002). With -broadcast it announces itself every -interval
+// a4c1380000000002), "fan", "climate" (an air conditioner), "thermostat"
+// (with one remote sensor), or "irblaster" and "irblaster2" (IR blasters
+// of control type 1 and 2). With -broadcast it announces itself every -interval
 // as a device of its version does (send to port 6666 for 3.1, 6667 for 3.2
 // to 3.4, 7000 for 3.5); with -devinfo it answers REQ_DEVINFO requests on
 // that UDP address. For example:
@@ -58,7 +60,7 @@ func run(ctx context.Context, args []string, out io.Writer, ready func(*sim.Devi
 	key := fs.String("key", "0123456789abcdef", "local key (16 characters)")
 	broadcast := fs.String("broadcast", "", "send the discovery announcement to this host:port")
 	interval := fs.Duration("interval", 5*time.Second, "announcement interval")
-	kind := fs.String("type", "plug", "device: plug, bulb, bulbv1, dimmer, cover or gateway")
+	kind := fs.String("type", "plug", "device: plug, bulb, bulbv1, dimmer, cover, gateway, fan, climate, thermostat, irblaster or irblaster2")
 	devinfo := fs.String("devinfo", "", "answer REQ_DEVINFO requests on this UDP host:port")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -86,8 +88,18 @@ func run(ctx context.Context, args []string, out io.Writer, ready func(*sim.Devi
 		b = sim.NewBulb(tuyalan.BulbDimmer)
 	case "cover":
 		b = sim.NewCover()
+	case "fan":
+		b = sim.NewFan()
+	case "climate":
+		b = sim.NewClimate()
+	case "thermostat":
+		b = sim.NewThermostat()
+	case "irblaster":
+		b = sim.NewIRBlaster(1)
+	case "irblaster2":
+		b = sim.NewIRBlaster(2)
 	default:
-		return fmt.Errorf("-type %q is not plug, bulb, bulbv1, dimmer, cover or gateway", *kind)
+		return fmt.Errorf("-type %q is not plug, bulb, bulbv1, dimmer, cover, gateway, fan, climate, thermostat, irblaster or irblaster2", *kind)
 	}
 	d := sim.New(sim.Config{ID: *id, LocalKey: *key, Version: *version, ProductKey: "keydemo" + *kind}, b)
 	if *kind == "gateway" {

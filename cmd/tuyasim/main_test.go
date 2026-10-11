@@ -70,7 +70,8 @@ func TestRunner(t *testing.T) {
 // Each device type serves its data points; the gateway its sub-devices;
 // -devinfo answers REQ_DEVINFO.
 func TestRunnerTypes(t *testing.T) {
-	for kind, want := range map[string]string{"bulb": "21", "bulbv1": "2", "dimmer": "2", "cover": "3", "gateway": ""} {
+	for kind, want := range map[string]string{"bulb": "21", "bulbv1": "2", "dimmer": "2", "cover": "3", "gateway": "",
+		"fan": "3", "climate": "101", "thermostat": "122", "irblaster": "201", "irblaster2": "13"} {
 		t.Run(kind, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()

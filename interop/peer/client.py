@@ -8,6 +8,7 @@
 #   python client.py gateway <host> <port> <version> <gateway id> <local key> <cid1> <cid2>
 #   python client.py bulb|cover <host> <port> <version> <device id> <local key>
 #   python client.py devinfo <host> <udp port>
+#   python client.py subdev|detect|irblaster|fan|thermostat <host> <port> <version> <device id> <local key>
 #
 # "session" reads, switches and sets a device with tinytuya's
 # OutletDevice and prints "PEER <step> <json>" after each step; after
@@ -16,7 +17,11 @@
 # "gateway" drives a plug and a bulb sub-device of a gateway with
 # tinytuya's child devices (cid, parent); "bulb" and "cover" drive
 # tinytuya's BulbDevice and CoverDevice; "devinfo" sends tinytuya's
-# REQ_DEVINFO (scanner.send_discovery_request) and decodes the answer.
+# REQ_DEVINFO (scanner.send_discovery_request) and decodes the answer;
+# "subdev" sends tinytuya's subdev_query to a gateway; "detect" runs
+# tinytuya's detect_available_dps; "irblaster", "fan" and "thermostat"
+# drive tinytuya's IRRemoteControlDevice, FloorFanDevice and
+# ThermostatDevice (Contrib classes).
 
 import json
 import socket
@@ -117,6 +122,74 @@ def cover(host, port, version, dev_id, key):
     say("done")
 
 
+def subdev(host, port, version, gw_id, key):
+    # tinytuya's sub-device online query, sent to the simulated gateway.
+    gw = tinytuya.Device(gw_id, host, key, **opts(version, port))
+    say("subdev", gw.subdev_query())
+    gw.close()
+    say("done")
+
+
+def detect(host, port, version, dev_id, key):
+    # tinytuya's data point brute force against a device22 simulator.
+    tinytuya.set_debug(True, False)  # shown by the test only on failure
+    d = tinytuya.Device(dev_id, host, key, **opts(version, port))
+    d.set_socketPersistent(True)
+    # The first run switches to device22 on its first range; a second run
+    # starts as device22.
+    first = sorted(d.detect_available_dps().keys(), key=int)
+    second = sorted(d.detect_available_dps().keys(), key=int)
+    say("detect", {"dps": first, "again": second, "dev_type": d.dev_type})
+    d.close()
+    say("done")
+
+
+def irblaster(host, port, version, dev_id, key):
+    # tinytuya's IRRemoteControlDevice: it detects the control type itself,
+    # sends a learned code and a head/key, then learns a button the
+    # simulator pushes.
+    from tinytuya.Contrib.IRRemoteControlDevice import IRRemoteControlDevice as IR
+    d = IR(dev_id, host, key, **opts(version, port))
+    say("type", {"type": d.control_type})
+    d.set_socketPersistent(True)
+    pulses = IR.nec_to_pulses(4, 8)
+    head, k = IR.pulses_to_head_key(pulses)
+    d.send_button(IR.pulses_to_base64(pulses))
+    d.send_key(head, k)
+    say("sent", {"head": head, "key": k})
+    say("learned", {"code": d.receive_button(timeout=15)})
+    d.close()
+    say("done")
+
+
+def fan(host, port, version, dev_id, key):
+    from tinytuya.Contrib.FloorFanDevice import FloorFanDevice
+    f = FloorFanDevice(dev_id, host, key, **opts(version, port))
+    f.set_socketPersistent(True)
+    f.set_power(True)
+    f.set_mode("nature")
+    f.set_speed(3)
+    f.set_oscillation(True)
+    f.set_timer("4h")
+    say("fan", f.status_json())
+    f.close()
+    say("done")
+
+
+def thermostat(host, port, version, dev_id, key):
+    from tinytuya.Contrib.ThermostatDevice import ThermostatDevice
+    t = ThermostatDevice(dev_id, host, key, **opts(version, port))
+    t.status()
+    say("thermostat", {"high_resolution": t.high_resolution, "cooling_c": t.cooling_setpoint_c, "temperature_c": t.temperature_c,
+                       "sensors": [{"id": s.id, "name": s.name, "temperature": s.temperature, "battery": s.battery} for s in t.sensors]})
+    t.setCoolSetpoint(23)
+    t.sensors["Hall"].setName("Landing")
+    t.status()
+    say("after", {"cooling_c": t.cooling_setpoint_c, "names": [s.name for s in t.sensors]})
+    t.close()
+    say("done")
+
+
 def devinfo(host, port):
     # tinytuya's own REQ_DEVINFO sender, aimed at the simulator; the answer
     # comes back to this socket.
@@ -140,5 +213,15 @@ elif mode == "cover":
     cover(*sys.argv[2:7])
 elif mode == "devinfo":
     devinfo(*sys.argv[2:4])
+elif mode == "subdev":
+    subdev(*sys.argv[2:7])
+elif mode == "detect":
+    detect(*sys.argv[2:7])
+elif mode == "irblaster":
+    irblaster(*sys.argv[2:7])
+elif mode == "fan":
+    fan(*sys.argv[2:7])
+elif mode == "thermostat":
+    thermostat(*sys.argv[2:7])
 else:
     listen()

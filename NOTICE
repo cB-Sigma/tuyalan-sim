@@ -23,7 +23,13 @@ Facts from other projects
 
 The protocol facts come from public descriptions, chiefly tinytuya
 (github.com/jasonacox/tinytuya; MIT, Copyright (c) 2024 Jason Cox),
-through the tuyalan module. No code was taken.
+through the tuyalan module. No code was taken. The field names of the
+simulated gateway's answer to the sub-device online query were read from
+hass-localtuya (github.com/xZetsubou/hass-localtuya; GPL-3.0); facts
+only, no code was copied or translated. The fan, air conditioner,
+thermostat and IR blaster types use the data point layouts of the
+tuyalan contrib package, facts read from tinytuya's Contrib classes
+(MIT); no code was taken.
 
 Interop tests (interop/, a separate test-only module)
 -----------------------------------------------------

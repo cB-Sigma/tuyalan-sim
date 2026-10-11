@@ -6,9 +6,10 @@
 // and answers to REQ_DEVINFO (ServeDevInfo), and fault switches (refused
 // or dropped controls, the network going down). The data points live
 // behind the Backend interface, so a test can keep them wherever its
-// other simulators do; Memory is a ready one, and NewPlug, NewBulb and
-// NewCover give the data points of common devices. Built from public
-// descriptions of the protocol; not a Tuya product.
+// other simulators do; Memory is a ready one, and NewPlug, NewBulb,
+// NewCover, NewFan, NewClimate, NewThermostat and NewIRBlaster give the
+// data points of common devices. Built from public descriptions of the
+// protocol; not a Tuya product.
 package sim
 
 import (
@@ -58,6 +59,8 @@ type Device struct {
 	controlRet      uint32
 	noControlAck    bool
 	subs            map[string]Backend
+	subOrder        []string
+	subOffline      map[string]bool
 	devinfo         *net.UDPConn
 	devInfoRequests int
 }
@@ -167,9 +170,39 @@ func (d *Device) AddSub(cid string, b Backend) {
 	d.mu.Lock()
 	if d.subs == nil {
 		d.subs = map[string]Backend{}
+		d.subOffline = map[string]bool{}
+	}
+	if _, ok := d.subs[cid]; !ok {
+		d.subOrder = append(d.subOrder, cid)
 	}
 	d.subs[cid] = b
 	d.mu.Unlock()
+}
+
+// SetSubOffline marks a sub-device online or offline for the answer to a
+// SubdevQuery (LAN_EXT_STREAM). Sub-devices are online by default.
+func (d *Device) SetSubOffline(cid string, offline bool) {
+	d.mu.Lock()
+	if d.subOffline == nil {
+		d.subOffline = map[string]bool{}
+	}
+	d.subOffline[cid] = offline
+	d.mu.Unlock()
+}
+
+// subdevStatus returns the online and offline sub-device cids in the order
+// they were added.
+func (d *Device) subdevStatus() (online, offline []string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, cid := range d.subOrder {
+		if d.subOffline[cid] {
+			offline = append(offline, cid)
+		} else {
+			online = append(online, cid)
+		}
+	}
+	return online, offline
 }
 
 // PushSub sends changed data points of a sub-device to every negotiated
@@ -422,6 +455,25 @@ func (s *server) serve(ss *session) {
 			if vals := be.Read(ids); len(vals) > 0 {
 				_ = ss.send(tuyalan.CmdStatus, s.statusPayload(vals, cid))
 			}
+		case tuyalan.CmdLanExtStream:
+			// A gateway's extension request; the sub-device online query is
+			// the one answered. 3.3 gateways do not answer it, so only 3.4
+			// and 3.5 devices reply.
+			var req struct {
+				ReqType string `json:"reqType"`
+			}
+			if tuyalan.Legacy(s.d.cfg.Version) || json.Unmarshal(p, &req) != nil || req.ReqType != "subdev_online_stat_query" {
+				continue
+			}
+			online, offline := s.d.subdevStatus()
+			if online == nil {
+				online = []string{}
+			}
+			if offline == nil {
+				offline = []string{}
+			}
+			body, _ := json.Marshal(map[string]any{"data": map[string]any{"online": online, "offline": offline}})
+			_ = ss.reply(tuyalan.CmdLanExtStream, m.Seq, 0, body)
 		case tuyalan.CmdControl, tuyalan.CmdControlNew:
 			s.d.mu.Lock()
 			refuse, drop := s.d.controlRet, s.d.noControlAck

@@ -26,8 +26,10 @@ oneM2M platform; it has no dependency on it.
 | Faults: refused controls (`SetControlRet`), dropped controls (`SetNoControlAck`), the device off the network (`SetDown`), stop and restart on the same address | yes |
 | Gateways and sub-devices: requests with a cid go to that sub-device's `Backend` (`AddSub`), answers and pushes carry the cid (`PushSub`); an unknown cid is refused | yes |
 | UPDATE_DPS: acknowledged, then the asked data points pushed | yes |
+| A gateway's sub-device online list: the LAN_EXT_STREAM `subdev_online_stat_query` answered with the online and offline cids (`SetSubOffline`); 3.3 gateways stay silent, as real ones are reported to | yes (one answer, without "reqType"; a real gateway's exact answer has not been captured) |
 | REQ_DEVINFO answers: the announcement sent back to the request's source (`ServeDevInfo`, `DevInfoRequests`) | yes (in any version; real devices that answer are 3.5) |
 | Device types: metering plug (`NewPlug`), bulbs of both layouts and a white-only bulb (`NewBulb`), a curtain motor that reaches positions at once (`NewCover`) | yes |
+| More device types on the tuyalan `contrib` layouts: floor fan (`NewFan`), air conditioner (`NewClimate`), 24 V thermostat with a remote sensor list (`NewThermostat`), IR blasters of control type 1 and 2 that record commands, follow study mode and report learned codes (`NewIRBlaster`, `IRBlaster.Learn`, `Commands`, `Studying`) | yes (the IR blaster sends no infrared; a learned code is one the test supplies) |
 | A real device's timing, a cover's travel time, colour effects | no |
 
 ## Install
@@ -66,7 +68,11 @@ tuyasim -listen 127.0.0.1:6668 -version 3.4 -broadcast 127.0.0.1:6667
 | `bulbv1` | 1 switch, 2 mode, 3 brightness and 4 colour temperature (25-255), 5 colour (RGB8) |
 | `dimmer` | 1 switch, 2 brightness, 3 colour temperature (25-255) |
 | `cover` | 1 control (open, close, stop, continue), 2 position to reach, 3 position reached (%) |
-| `gateway` | none of its own; a `plug` sub-device with cid a4c1380000000001 and a `bulb` with a4c1380000000002 |
+| `gateway` | none of its own; a `plug` sub-device with cid a4c1380000000001 and a `bulb` with a4c1380000000002, both online for the sub-device online query (3.4 and 3.5) |
+| `fan` | 1 power, 2 mode, 3 speed (1-5), 5 oscillation, 22 timer |
+| `climate` | 1 power, 2 target and 3 room temperature, 4 mode, 5 fan speed, 19 unit, 22 timer, 25 sleep, 30 swing, 101 state |
+| `thermostat` | the low-resolution layout (2 mode, 16/17 setpoint, 18-20 and 26 cooling and heating setpoints, 24/29 temperature, 115 fan, 120 hold, 129 system and others) and a sensor list on 122 |
+| `irblaster`, `irblaster2` | IR blaster of control type 1 (201 commands, 202 learned code) or 2 (1 mode, 2 learned, 3 head, 4 key, 7 code, 13 code type) |
 
 ## In Go tests
 
@@ -91,9 +97,9 @@ Reference: https://pkg.go.dev/github.com/cB-Sigma/tuyalan-sim
 
 | Package | What it does |
 |---|---|
-| `sim` | `New(Config, Backend)`, `Device` (`Start`, `Stop`, `Push`, `Broadcast`, `ServeDevInfo`, `DevInfoRequests`, `AddSub`, `PushSub`, `SetControlRet`, `SetNoControlAck`, `SetDown`, `Sessions`), `Memory` (a ready `Backend` that records controls), `NewPlug`, `NewBulb`, `NewCover` / `Cover` |
-| `cmd/tuyasim` | Serves a plug, bulb, dimmer, cover or gateway of any version, announces it and answers REQ_DEVINFO |
-| `interop` (nested module, tests only) | tinytuya's client, child devices, bulb and cover classes, REQ_DEVINFO sender and announcement decoder against the simulator, in a container |
+| `sim` | `New(Config, Backend)`, `Device` (`Start`, `Stop`, `Push`, `Broadcast`, `ServeDevInfo`, `DevInfoRequests`, `AddSub`, `PushSub`, `SetSubOffline`, `SetControlRet`, `SetNoControlAck`, `SetDown`, `Sessions`), `Memory` (a ready `Backend` that records controls), `NewPlug`, `NewBulb`, `NewCover` / `Cover`, `NewFan`, `NewClimate`, `NewThermostat`, `NewIRBlaster` / `IRBlaster` |
+| `cmd/tuyasim` | Serves a plug, bulb, dimmer, cover, gateway, fan, air conditioner, thermostat or IR blaster of any version, announces it and answers REQ_DEVINFO |
+| `interop` (nested module, tests only) | tinytuya's client, child devices, bulb, cover, IR remote, floor fan and thermostat classes, sub-device online query, data point detection, REQ_DEVINFO sender and announcement decoder against the simulator, in a container |
 
 Changes per version are in [CHANGELOG.md](CHANGELOG.md).
 
@@ -106,11 +112,19 @@ cd interop && SIGMA_TUYALAN_INTEROP=1 go test -v ./...   # needs Docker
 
 The tests at the module root drive the tuyalan client against the
 simulator: every version, faults, a device going down, discovery
-(listening and REQ_DEVINFO), scanning and `Identify`, gateways and
-sub-devices, UPDATE_DPS, and the bulb, cover and countdown helpers.
-Tests carry `// Covers: SIG-...` comments: requirement IDs of the
-SigmaM2M project's compliance report, with no meaning outside it; the
-tests added in v0.2.0 carry none yet.
+(listening and REQ_DEVINFO), scanning, `Identify` and
+`IdentifyWithKeys`, gateways and sub-devices with their online list,
+UPDATE_DPS, `DetectAvailableDPS`, the persistent `Device` (status, set,
+pushes, cache, reconnection after the network drops, for 3.3, 3.4 and
+3.5; its status answer is never a change push still on its way, and a
+device22 device is read with `QueryDPS`), the bulb, cover and countdown
+helpers, and the tuyalan `contrib` helpers driving the fan, air
+conditioner, thermostat (state, sensor list, setpoint, a renamed
+sensor) and both kinds of IR blaster (study, a learned code pushed,
+sending it). Tests carry
+`// Covers: SIG-...` comments: requirement IDs of the SigmaM2M project's
+compliance report, with no meaning outside it; the tests added in v0.2.0
+and v0.3.0 carry none yet.
 
 ### Interop tested against
 
@@ -138,6 +152,28 @@ tests added in v0.2.0 carry none yet.
   REQ_DEVINFO sender (`scanner.send_discovery_request`) got the 3.5
   simulator's announcement back through Docker's UDP port mapping and
   decoded it.
+- Same image, v0.3.0 (2026-10-12, Docker Engine 29.4.3 on arm64; the
+  whole suite was rerun and passed): tinytuya's `subdev_query` reached
+  the simulated 3.4 and 3.5 gateways and returned their answer with one
+  sub-device online and one offline. tinytuya's `detect_available_dps`
+  against a 3.3 device22 simulator found data points 1, 18, 19 and 20 on
+  its first run and 1, 9, 18, 19 and 20 on a second: tinytuya resets its
+  request list to data point 1 when it switches a device to device22, so
+  the range that triggered the switch is not asked (tinytuya's own
+  behaviour, read in its debug log; tuyalan's `DetectAvailableDPS` asks
+  every range).
+- Same image, later on 2026-10-12, the new device types (whole suite
+  rerun, all passed): tinytuya's `IRRemoteControlDevice`, given no
+  control type, detected type 1 and type 2 on the simulated blasters,
+  sent a learned code and a head/key that the simulator decoded into the
+  commands tuyalan's `contrib` helpers build, and its `receive_button`
+  got the code the simulator pushed during the study. tinytuya's
+  `FloorFanDevice` switched, set mode, speed, oscillation and timer on
+  the 3.4 fan; the five controls are the `contrib` helpers' controls.
+  tinytuya's `ThermostatDevice` read the 3.3 thermostat's resolution,
+  setpoint, temperature and remote sensor (ID, name, temperature,
+  battery) as `contrib` reads them, and its cooling setpoint and sensor
+  rename are the controls `contrib` builds.
 - Not yet: compared with a real Tuya device (needs hardware). The simulator and the
   tuyalan client are written by the same author, so their agreement is
   not independent; the tinytuya runs are.

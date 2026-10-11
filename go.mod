@@ -2,4 +2,4 @@ module github.com/cB-Sigma/tuyalan-sim
 
 go 1.22
 
-require github.com/cB-Sigma/tuyalan v0.2.0
+require github.com/cB-Sigma/tuyalan v0.3.0

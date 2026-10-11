@@ -54,12 +54,15 @@ func TestDiscoverAgainstSimulator(t *testing.T) {
 	if d.DevInfoRequests() < 2 {
 		t.Errorf("requests %d", d.DevInfoRequests())
 	}
-	// Datagrams that are not requests are not answered.
+	// Datagrams that are not requests are not answered. Requests Discover
+	// sent just before it returned may still be arriving: let them land
+	// before taking the count.
+	time.Sleep(300 * time.Millisecond)
+	n := d.DevInfoRequests()
 	c, _ := net.Dial("udp", at)
 	ann, _ := tuyalan.EncodeBroadcast(tuyalan.Broadcast{GwID: "x", Version: "3.5"})
 	_, _ = c.Write(ann)
 	c.Close()
-	n := d.DevInfoRequests()
 	time.Sleep(100 * time.Millisecond)
 	if d.DevInfoRequests() != n {
 		t.Error("an announcement was counted as a request")
