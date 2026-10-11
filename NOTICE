@@ -1,0 +1,47 @@
+tuyalan-sim (a simulated Tuya LAN device, in Go)
+Copyright 2026 Abhinav Gautam
+
+This module is licensed under the Apache License, Version 2.0 (LICENSE).
+
+The code was written for SigmaM2M, a oneM2M platform, from public
+descriptions of the Tuya LAN protocol (PROVENANCE.md). It contains no
+code from other projects. sim/sim.go comes from SigmaM2M and carries no
+per-file copyright header, the convention of the code it comes from; the
+copyright line above covers it. Files added for this module carry
+"Copyright 2026 Abhinav Gautam" and "SPDX-License-Identifier:
+Apache-2.0".
+
+Trademarks
+----------
+
+Tuya is a trademark of its owner. This module is not made, endorsed or
+supported by Tuya, and is not affiliated with it; the name is used only
+to say which devices it simulates.
+
+Facts from other projects
+-------------------------
+
+The protocol facts come from public descriptions, chiefly tinytuya
+(github.com/jasonacox/tinytuya; MIT, Copyright (c) 2024 Jason Cox),
+through the tuyalan module. No code was taken.
+
+Interop tests (interop/, a separate test-only module)
+-----------------------------------------------------
+
+interop/peer/Dockerfile installs tinytuya 1.20.0 (MIT, Copyright (c)
+2024 Jason Cox) and its dependencies from PyPI into a python:3.14-slim
+image at test time; nothing of tinytuya is copied into this repository.
+interop/peer/client.py is our own script that calls tinytuya.
+
+Dependencies
+------------
+
+- github.com/cB-Sigma/tuyalan (the Tuya LAN protocol; Copyright 2026
+  Abhinav Gautam, Apache-2.0, standard library only).
+- The Go standard library (BSD-3-Clause, Copyright The Go Authors).
+
+Test data
+---------
+
+Every device ID, local key, product key and address in this module is a
+made-up demo value.
